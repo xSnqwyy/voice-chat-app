@@ -1,1 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hey babe ;)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    #startBtn {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    #message {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Your Surprise my love ;)</h1>
+  <button id="startBtn">Click</button>
+  <div id="message"></div>
+  
+  <script>
+    let startBtn = document.getElementById('startBtn');
+    let messageDiv = document.getElementById('message');
+    let peerConnection;
+    let localStream;
+    let remoteStream;
+    let socket = new WebSocket('https://yoursurprisemylove.netlify.app'); // replace with your WebSocket server URL
 
+    startBtn.addEventListener('click', startChat);
+
+    async function startChat() {
+      try {
+        // Request access to user's microphone
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        messageDiv.textContent = "Your microphone is ready. Waiting for connection...";
+
+        // Create a peer connection
+        peerConnection = new RTCPeerConnection();
+
+        // Send local stream to the peer connection
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        // Handle incoming remote stream
+        peerConnection.ontrack = (event) => {
+          if (!remoteStream) {
+            remoteStream = event.streams[0];
+            let audio = new Audio();
+            audio.srcObject = remoteStream;
+            audio.play();
+          }
+        };
+
+        // Connect to signaling server
+        socket.onmessage = async (message) => {
+          let data = JSON.parse(message.data);
+          
+          if (data.offer) {
+            await handleOffer(data.offer);
+          } else if (data.answer) {
+            await handleAnswer(data.answer);
+          } else if (data.iceCandidate) {
+            await handleIceCandidate(data.iceCandidate);
+          }
+        };
+
+        // Create an offer and send it
+        let offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.send(JSON.stringify({ offer: offer }));
+
+      } catch (error) {
+        console.error("Error starting voice chat:", error);
+      }
+    }
+
+    async function handleOffer(offer) {
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        let answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.send(JSON.stringify({ answer: answer }));
+      } catch (error) {
+        console.error("Error handling offer:", error);
+      }
+    }
+
+    async function handleAnswer(answer) {
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error("Error handling answer:", error);
+      }
+    }
+
+    async function handleIceCandidate(candidate) {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error("Error adding ice candidate:", error);
+      }
+    }
+  </script>
+</body>
+</html>
